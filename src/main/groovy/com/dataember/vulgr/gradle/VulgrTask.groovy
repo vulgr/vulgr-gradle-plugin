@@ -1,5 +1,8 @@
-package com.dataember.slic.gradle
+package com.dataember.vulgr.gradle
 
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import org.apache.log4j.Logger
 import org.gradle.api.Project
 import org.gradle.api.internal.ConventionTask
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionComparator
@@ -10,22 +13,24 @@ import org.gradle.api.reporting.dependencies.internal.DefaultDependencyReportCon
 import org.gradle.api.reporting.dependencies.internal.JsonProjectDependencyRenderer
 import org.gradle.api.tasks.TaskAction
 import org.gradle.internal.reflect.Instantiator
+import org.gradle.util.GFileUtils
 
 import javax.inject.Inject
 
 /**
  * Created by chaospie on 08/02/16.
  */
-class SlicTask extends ConventionTask implements Reporting<DependencyReportContainer> {
+class VulgrTask extends ConventionTask implements Reporting<DependencyReportContainer> {
 
+    Logger log = Logger.getLogger(VulgrTask.class)
 
     private final DefaultDependencyReportContainer reports;
 
     private Set<Project> projects;
 
+    private boolean upload;
 
-    SlicTask() {
-        println "test test"
+    VulgrTask() {
         reports = getInstantiator().newInstance(DefaultDependencyReportContainer.class, this)
     }
 
@@ -42,14 +47,21 @@ class SlicTask extends ConventionTask implements Reporting<DependencyReportConta
 
     @TaskAction
     void generate() {
-        println "test test test"
-
         JsonProjectDependencyRenderer renderer =
                 new JsonProjectDependencyRenderer(getVersionScheme(), getVersionComparator())
 
         projects.each {
-            println it.name
-            println renderer.render(it)
+            /**
+             * Using the json string directly generates invalid json,
+             * so create a Gson JsonObject first.
+             */
+            println("Generating JSON dependencies for " + it.name + ".")
+            JsonParser parser = new JsonParser();
+            JsonObject obj = parser.parse(renderer.render(it)).getAsJsonObject()
+            JsonObject updatedObj = obj.get("project")
+            updatedObj.addProperty("version", it.version.toString())
+            String depsFile = it.file("${it.buildDir}/libs/${it.name}-${it.version}-dependencies.json")
+            GFileUtils.writeFile(updatedObj.toString(), new File(depsFile), "utf-8")
         }
 
     }
@@ -71,5 +83,9 @@ class SlicTask extends ConventionTask implements Reporting<DependencyReportConta
 
     void setProjects(Set<Project> projects) {
         this.projects = projects;
+    }
+
+    void setUpload(boolean upload) {
+        this.upload = upload;
     }
 }
